@@ -257,9 +257,10 @@ internal sealed class VendaRepositorio(AppDbContext contexto) : IVendaRepositori
     {
         if (!contexto.Database.IsSqlServer())
             return Interlocked.Increment(ref sequencialAlternativo);
-        return await contexto
+        var valoresSequence = await contexto
             .Database.SqlQueryRaw<long>("SELECT NEXT VALUE FOR dbo.NumeroVendaSequence AS [Value]")
-            .SingleAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+        return valoresSequence.Single();
     }
 
     public Task<ResultadoIdempotencia?> ObterVendaPorChaveIdempotenciaAsync(
