@@ -10,6 +10,27 @@ Aplicação full stack de gestão comercial para clientes, produtos, estoque, PD
 - Estoque, venda, movimentos e financeiro são persistidos na mesma transação. Vendas usam isolamento `Serializable` e `rowversion` para concorrência otimista.
 - Números de venda são obtidos de uma sequence do SQL Server, evitando colisões entre requisições concorrentes.
 
+## Desenvolvimento assistido por Inteligência Artificial
+
+Este projeto também foi utilizado como estudo prático de desenvolvimento de software assistido por Inteligência Artificial, incorporando ferramentas de IA generativa e AI Coding ao fluxo de engenharia sem substituir a análise e a responsabilidade técnica do desenvolvedor.
+
+A IA foi utilizada como apoio em diferentes etapas do ciclo de desenvolvimento, incluindo:
+
+- análise e refinamento de requisitos;
+- planejamento de funcionalidades e divisão de tarefas;
+- apoio à implementação de código backend e frontend;
+- análise de código e identificação de possíveis problemas;
+- investigação e correção de bugs;
+- refatoração e melhoria de código existente;
+- criação e evolução de testes unitários, de integração e end-to-end;
+- documentação técnica e definição de instruções reutilizáveis para o desenvolvimento.
+
+As sugestões produzidas por IA são tratadas como insumos para análise, e não como decisões automáticas. Código, arquitetura, regras de negócio, segurança, persistência, concorrência e demais decisões técnicas são revisados e validados antes de serem incorporados ao projeto.
+
+O repositório também mantém instruções e prompts utilizados durante o processo em docs/prompts, permitindo documentar parte da interação entre engenharia de software e ferramentas de IA.
+
+O objetivo dessa abordagem é explorar como a IA pode aumentar a produtividade, acelerar ciclos de análise e implementação e apoiar a qualidade do software, mantendo princípios como SOLID, Clean Architecture, testes automatizados, revisão técnica e responsabilidade sobre o código produzido.
+
 ## Pré-requisitos
 
 - SDK .NET 10.
