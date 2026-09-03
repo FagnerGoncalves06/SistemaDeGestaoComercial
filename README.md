@@ -1,35 +1,15 @@
 # Sistema de Gestão Comercial
 
-## Mensageria e arquitetura orientada a eventos
-
-O sistema usa RabbitMQ 4 com Management Plugin. A venda é confirmada atomicamente no SQL Server
-junto com estoque, financeiro, idempotência HTTP e uma `OutboxMessage`. Depois do commit, o
-`OutboxProcessor` publica `VendaRealizadaEvent` em `gestao-comercial.events`/`venda.realizada`.
-
-```text
-Venda -> SQL [Venda + Estoque + Financeiro + Idempotência + Outbox]
-      -> OutboxProcessor -> RabbitMQ -> Consumer -> [Inbox + AlertaEstoque] -> ACK
-```
-
-O consumidor confirma só após salvar Inbox e alertas na mesma transação. A chave única
-`EventoId + Consumer` evita duplicatas; falhas passam três vezes pela fila de retry com TTL e então
-seguem para a DLQ. RabbitMQ indisponível não impede vendas: a Outbox fica pendente, motivo pelo qual
-o readiness reporta o broker como `Degraded`.
-
-Copie `.env.example` para `.env`, defina credenciais e execute `docker compose up -d`. O painel fica
-em `http://localhost:15672`. Aplique migrations com
-`dotnet ef database update --project SistemaDeGestaoComercial.Infraestrutura --startup-project SistemaDeGestaoComercial.Api`.
-
-
 Aplicação full stack de gestão comercial para clientes, produtos, estoque, PDV, vendas, financeiro, usuários e dashboard. O backend usa Clean Architecture pragmática e o frontend consome contratos HTTP tipados.
 
 ## Tecnologias e arquitetura
 
-- .NET 10/C# 14, ASP.NET Core, EF Core 10, SQL Server, JWT, Swagger/OpenAPI e xUnit.
+- .NET 10/C# 14, ASP.NET Core, EF Core 10, SQL Server, RabbitMQ 4, JWT, Swagger/OpenAPI e xUnit.
 - React 19, TypeScript estrito, Vite, Tailwind CSS, componentes locais no padrão shadcn/ui, React Hook Form, Zod e Axios.
 - Dependências: `Dominio <- Aplicacao <- Infraestrutura <- API`. A Aplicação contém casos de uso separados por módulo e portas de persistência; a Infraestrutura implementa EF Core, repositórios e unidade de trabalho.
 - Estoque, venda, movimentos e financeiro são persistidos na mesma transação. Vendas usam isolamento `Serializable` e `rowversion` para concorrência otimista.
 - Números de venda são obtidos de uma sequence do SQL Server, evitando colisões entre requisições concorrentes.
+- Eventos de venda usam Transactional Outbox, consumidor idempotente com Inbox, publisher confirms, retry e dead-letter queue.
 
 ## Desenvolvimento assistido por Inteligência Artificial
 
@@ -57,17 +37,24 @@ O objetivo dessa abordagem é explorar como a IA pode aumentar a produtividade, 
 - SDK .NET 10.
 - Node.js 22+ e npm.
 - SQL Server 2022, local ou via Docker.
+- Docker Desktop com o Docker Engine ativo, para executar o RabbitMQ localmente.
 
 ## SQL Server e configurações
 
-Copie `.env.example` somente como referência e defina os valores no ambiente. Não versione o arquivo `.env`.
+Copie `.env.example` para `.env` e substitua os valores de exemplo. A API procura esse arquivo no diretório atual e nos diretórios pais; ele não deve ser versionado.
 
 ```powershell
-$env:SQLSERVER_SA_PASSWORD = '<senha-forte>'
-docker compose up -d
-$env:ConnectionStrings__SqlServer = "Server=localhost,1433;Database=GestaoComercial;User Id=sa;Password=$env:SQLSERVER_SA_PASSWORD;TrustServerCertificate=True"
-$env:GESTAO_JWT_KEY = '<chave-aleatoria-com-32-ou-mais-bytes>'
+Copy-Item .env.example .env
 ```
+
+Para usar uma instância SQL Server já instalada, configure, por exemplo:
+
+```dotenv
+ConnectionStrings__SqlServer=Server=NOME-DO-SERVIDOR;Database=GestaoComercial;Integrated Security=True;Encrypt=False;TrustServerCertificate=True
+GESTAO_JWT_KEY=chave-aleatoria-com-32-ou-mais-bytes
+```
+
+Para executar também o SQL Server pelo Docker, informe `SQLSERVER_SA_PASSWORD` no `.env`, ajuste a connection string para `localhost,1433` e execute `docker compose up -d sqlserver`.
 
 Para dados fictícios de desenvolvimento:
 
@@ -79,7 +66,58 @@ $env:Seed__OperadorPassword = '<senha-operador>'
 
 Os logins criados são `admin@gestao.test` e `operador@gestao.test`; as senhas são exclusivamente as variáveis acima. Clientes, produtos, estoque, venda e despesa são fictícios.
 
+## RabbitMQ e mensageria
+
+Preencha no `.env` as mesmas credenciais para o container e para a aplicação:
+
+```dotenv
+RABBITMQ_USER=gestao
+RABBITMQ_PASSWORD=troque-esta-senha
+RabbitMq__HostName=localhost
+RabbitMq__Port=5672
+RabbitMq__UserName=gestao
+RabbitMq__Password=troque-esta-senha
+RabbitMq__Enabled=true
+```
+
+Com o Docker Desktop aberto e o Engine em execução, inicie somente o RabbitMQ:
+
+```powershell
+docker compose up -d rabbitmq
+docker compose ps
+docker compose logs rabbitmq
+```
+
+- AMQP usado pela API: `localhost:5672`.
+- Painel de administração: `http://localhost:15672`, com `RABBITMQ_USER` e `RABBITMQ_PASSWORD`.
+- As exchanges e filas são declaradas automaticamente quando a API estabelece conexão; não é necessário criá-las pelo painel.
+
+### Fluxo de uma venda
+
+```text
+POST /api/vendas
+  -> transação SQL [Venda + Estoque + Financeiro + Idempotência HTTP + Outbox]
+  -> OutboxProcessor -> exchange gestao-comercial.events (venda.realizada)
+  -> fila gestao-comercial.estoque -> VendaRealizadaConsumer
+  -> transação SQL [Inbox + AlertaEstoque] -> ACK
+```
+
+A confirmação da venda não depende da disponibilidade momentânea do broker. Se o RabbitMQ estiver indisponível, a mensagem permanece pendente em `OutboxMessages` e o processador tenta publicá-la novamente. O envio usa mensagens persistentes e publisher confirms.
+
+O consumidor registra `EventoId + Consumer` na Inbox antes do `ACK`, evitando efeitos duplicados. Quando o processamento falha, a mensagem passa até três vezes pela fila de retry, com atraso padrão de 15 segundos, e depois segue para a DLQ.
+
+| Finalidade | Exchange/fila | Routing key |
+| --- | --- | --- |
+| Eventos de domínio | `gestao-comercial.events` | `venda.realizada` |
+| Consumo de estoque | `gestao-comercial.estoque` | `venda.realizada` |
+| Retry | `gestao-comercial.retry` / `gestao-comercial.estoque.retry` | fila de retry |
+| Mensagens não processadas | `gestao-comercial.dlx` / `gestao-comercial.estoque.dlq` | DLQ |
+
+O evento de venda gera um alerta apenas quando o estoque resultante do produto fica menor ou igual ao estoque mínimo configurado. Os alertas ficam disponíveis para administradores na tela de estoque e pela API.
+
 ## Migrations e execução
+
+Pare instâncias anteriores da API antes de compilar ou executar, para evitar o erro `MSB3027/MSB3021` de arquivo DLL bloqueado. Depois, na raiz do repositório:
 
 ```powershell
 dotnet tool restore
@@ -106,13 +144,29 @@ npm.cmd run dev -- --host localhost --port 5173 --strictPort
 - `POST /api/auth/logout` e `GET /api/auth/session`
 - `/api/clientes` e `/api/clientes/{id}/compras`
 - `/api/produtos` e `/api/estoque/movimentacoes`
+- `GET /api/estoque/alertas` e `PUT /api/estoque/alertas/{id}/visualizar` (Administrador)
 - `/api/vendas`, `/api/vendas/{id}/cancelar` e `/api/vendas/{id}/recibo`
 - `/api/financeiro`, `/api/financeiro/despesas` e `/api/dashboard`
 - `/api/usuarios` (Administrador) e `/api/cep/{cep}`
 
 Listagens aceitam `pagina` e `tamanhoPagina`; clientes e produtos aceitam `busca`. Erros usam RFC 7807 `ProblemDetails`.
 
-`GET /health` verifica a disponibilidade do processo e `GET /health/ready` verifica também a conexão com o SQL Server.
+`GET /health` verifica a disponibilidade do processo. `GET /health/ready` verifica também SQL Server e RabbitMQ. Se apenas o broker estiver indisponível, o readiness retorna `Degraded`, enquanto as vendas continuam protegidas pela Outbox.
+
+## Diagnóstico da mensageria
+
+Se as filas não aparecerem no painel, confirme primeiro que o container está saudável e que a API foi iniciada com a mensageria habilitada:
+
+```powershell
+docker compose ps rabbitmq
+docker compose logs rabbitmq
+Invoke-RestMethod http://localhost:5291/health/ready
+docker compose exec rabbitmq rabbitmqctl list_queues name messages consumers
+```
+
+Uma fila com `0` mensagens pode estar funcionando normalmente: o consumidor conectado processa e confirma os eventos rapidamente. Verifique a coluna `consumers`, os alertas no sistema e os logs da API.
+
+Se o comando `docker` não for reconhecido ou retornar erro em `dockerDesktopLinuxEngine`, abra/reinicie o Docker Desktop e aguarde o Engine ficar ativo antes de repetir `docker compose up -d rabbitmq`.
 
 ## Builds e testes
 
