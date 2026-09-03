@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { api, mensagemErro } from './lib/api';
 import type {
+  AlertaEstoque,
   Cliente,
   Dashboard,
   MovimentoEstoque,
@@ -578,6 +579,7 @@ export function ProdutoFormPage() {
 export function EstoquePage() {
   const produtos = useLista<Produto>('/produtos?tamanhoPagina=100');
   const movimentos = useLista<MovimentoEstoque>('/estoque/movimentacoes?tamanhoPagina=100');
+  const alertas = useLista<AlertaEstoque>('/estoque/alertas?tamanhoPagina=20');
   const [produtoId, setProduto] = useState('');
   const [quantidade, setQuantidade] = useState(1);
   const [tipo, setTipo] = useState('Entrada');
@@ -640,6 +642,25 @@ export function EstoquePage() {
           </Campo>
           <Button onClick={enviar}>Registrar</Button>
         </div>
+      </Card>
+      <Card className="mt-4 overflow-x-auto">
+        <h3 className="mb-3 font-bold">Alertas de estoque baixo ({alertas.totalItens})</h3>
+        {alertas.dados.length === 0 ? (
+          <Empty>Nenhum alerta de estoque.</Empty>
+        ) : (
+          <table>
+            <thead><tr><th>Data</th><th>Produto</th><th>Estoque</th><th>Mínimo</th><th>Venda</th><th>Status</th></tr></thead>
+            <tbody>{alertas.dados.map((alerta) => (
+              <tr key={alerta.id}>
+                <td>{data(alerta.createdAt)}</td><td>{alerta.produto}</td><td>{alerta.quantidadeAtual}</td>
+                <td>{alerta.estoqueMinimo}</td><td>{alerta.numeroVenda}</td>
+                <td>{alerta.visualizado ? 'Visualizado' : <Button type="button" onClick={async () => {
+                  await api.put(`/estoque/alertas/${alerta.id}/visualizar`); alertas.recarregar();
+                }}>Marcar como visto</Button>}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        )}
       </Card>
       <Card className="mt-4 overflow-x-auto">
         <table>

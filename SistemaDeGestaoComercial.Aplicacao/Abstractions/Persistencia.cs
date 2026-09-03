@@ -1,4 +1,5 @@
 using System.Data;
+using SistemaDeGestaoComercial.Aplicacao.Contratos;
 using SistemaDeGestaoComercial.Dominio.Entidades;
 
 namespace SistemaDeGestaoComercial.Aplicacao.Abstractions;
@@ -27,6 +28,27 @@ public interface IUnidadeTrabalho
 {
     Task<ITransacaoAplicacao> IniciarTransacaoAsync(IsolationLevel isolamento, CancellationToken cancellationToken);
     Task SalvarAsync(CancellationToken cancellationToken);
+}
+
+public interface IOutboxRepositorio
+{
+    void Adicionar(VendaRealizadaEvent evento, string? correlationId = null);
+}
+
+public interface IInboxRepositorio
+{
+    Task<bool> JaProcessadaAsync(Guid messageId, string consumer, CancellationToken cancellationToken);
+    void Adicionar(Guid messageId, string consumer);
+}
+
+public interface IAlertaEstoqueRepositorio
+{
+    Task<ResultadoPaginado<AlertaEstoque>> ListarAsync(
+        int pagina,
+        int tamanhoPagina,
+        CancellationToken cancellationToken
+    );
+    Task<AlertaEstoque?> ObterAsync(Guid id, CancellationToken cancellationToken);
 }
 
 public interface IUsuarioRepositorio

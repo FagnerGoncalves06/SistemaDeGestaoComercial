@@ -16,8 +16,10 @@ using SistemaDeGestaoComercial.Aplicacao.Abstractions;
 using SistemaDeGestaoComercial.Aplicacao.Contratos;
 using SistemaDeGestaoComercial.Dominio.Entidades;
 using SistemaDeGestaoComercial.Infraestrutura;
+using SistemaDeGestaoComercial.Infraestrutura.Mensageria;
 using SistemaDeGestaoComercial.Infraestrutura.Persistencia;
 
+EnvLocal.Carregar();
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -36,7 +38,10 @@ builder.Services.AddCors(opcoesCors =>
     )
 );
 builder.Services.AddProblemDetails();
-builder.Services.AddHealthChecks().AddCheck<SqlServerHealthCheck>("sqlserver");
+builder
+    .Services.AddHealthChecks()
+    .AddCheck<SqlServerHealthCheck>("sqlserver")
+    .AddCheck<RabbitMqHealthCheck>("rabbitmq", failureStatus: HealthStatus.Degraded);
 builder.Services.AddRateLimiter(opcoes =>
 {
     opcoes.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -258,6 +263,40 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions()).AllowAnonymous();
 app.Run();
 
 public partial class Program;
+
+internal static class EnvLocal
+{
+    public static void Carregar()
+    {
+        var diretorio = new DirectoryInfo(Directory.GetCurrentDirectory());
+        FileInfo? arquivo = null;
+        while (diretorio is not null)
+        {
+            var candidato = new FileInfo(Path.Combine(diretorio.FullName, ".env"));
+            if (candidato.Exists)
+            {
+                arquivo = candidato;
+                break;
+            }
+            diretorio = diretorio.Parent;
+        }
+        if (arquivo is null)
+            return;
+        foreach (var linhaOriginal in File.ReadLines(arquivo.FullName))
+        {
+            var linha = linhaOriginal.Trim();
+            if (linha.Length == 0 || linha.StartsWith('#'))
+                continue;
+            var separador = linha.IndexOf('=');
+            if (separador <= 0)
+                continue;
+            var nome = linha[..separador].Trim();
+            var valor = linha[(separador + 1)..].Trim().Trim('"', '\'');
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(nome)))
+                Environment.SetEnvironmentVariable(nome, valor);
+        }
+    }
+}
 
 internal sealed class SqlServerHealthCheck(AppDbContext contexto) : IHealthCheck
 {

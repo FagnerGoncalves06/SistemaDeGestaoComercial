@@ -69,6 +69,17 @@ export interface MovimentoEstoque {
   usuario: string;
   observacao?: string;
 }
+export interface AlertaEstoque {
+  id: string;
+  produtoId: string;
+  produto: string;
+  vendaId: string;
+  numeroVenda: string;
+  quantidadeAtual: number;
+  estoqueMinimo: number;
+  createdAt: string;
+  visualizado: boolean;
+}
 export interface MovimentoFinanceiro {
   id: string;
   tipo: string;

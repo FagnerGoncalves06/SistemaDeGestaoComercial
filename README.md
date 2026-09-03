@@ -1,5 +1,26 @@
 # Sistema de Gestão Comercial
 
+## Mensageria e arquitetura orientada a eventos
+
+O sistema usa RabbitMQ 4 com Management Plugin. A venda é confirmada atomicamente no SQL Server
+junto com estoque, financeiro, idempotência HTTP e uma `OutboxMessage`. Depois do commit, o
+`OutboxProcessor` publica `VendaRealizadaEvent` em `gestao-comercial.events`/`venda.realizada`.
+
+```text
+Venda -> SQL [Venda + Estoque + Financeiro + Idempotência + Outbox]
+      -> OutboxProcessor -> RabbitMQ -> Consumer -> [Inbox + AlertaEstoque] -> ACK
+```
+
+O consumidor confirma só após salvar Inbox e alertas na mesma transação. A chave única
+`EventoId + Consumer` evita duplicatas; falhas passam três vezes pela fila de retry com TTL e então
+seguem para a DLQ. RabbitMQ indisponível não impede vendas: a Outbox fica pendente, motivo pelo qual
+o readiness reporta o broker como `Degraded`.
+
+Copie `.env.example` para `.env`, defina credenciais e execute `docker compose up -d`. O painel fica
+em `http://localhost:15672`. Aplique migrations com
+`dotnet ef database update --project SistemaDeGestaoComercial.Infraestrutura --startup-project SistemaDeGestaoComercial.Api`.
+
+
 Aplicação full stack de gestão comercial para clientes, produtos, estoque, PDV, vendas, financeiro, usuários e dashboard. O backend usa Clean Architecture pragmática e o frontend consome contratos HTTP tipados.
 
 ## Tecnologias e arquitetura

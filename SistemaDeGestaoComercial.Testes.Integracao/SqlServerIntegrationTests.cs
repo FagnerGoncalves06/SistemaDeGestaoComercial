@@ -81,6 +81,7 @@ public sealed class SqlServerIntegrationTests : IClassFixture<SqlServerApiFactor
 
         await using var contexto = factory.CriarContexto();
         Assert.Equal(1, await contexto.Vendas.CountAsync(item => item.Id == venda.Id));
+        Assert.Equal(1, await contexto.OutboxMessages.CountAsync(item => item.Conteudo.Contains(venda.Id.ToString())));
         Assert.Equal(
             1,
             await contexto.MovimentacoesFinanceiras.CountAsync(item =>
@@ -96,6 +97,7 @@ public sealed class SqlServerIntegrationTests : IClassFixture<SqlServerApiFactor
         using var client = await factory.CriarClienteAdministradorAsync();
         var produto = await factory.CriarProdutoComEstoqueAsync(0);
         var vendasAntes = await factory.ContarVendasAsync();
+        var outboxAntes = await factory.ContarOutboxAsync();
         var chave = Guid.NewGuid().ToString("N");
         using var requisicao = new HttpRequestMessage(HttpMethod.Post, "/api/vendas")
         {
@@ -123,6 +125,7 @@ public sealed class SqlServerIntegrationTests : IClassFixture<SqlServerApiFactor
         await using var contexto = factory.CriarContexto();
         Assert.Equal(vendasAntes, await contexto.Vendas.CountAsync());
         Assert.False(await contexto.RegistrosIdempotencia.AnyAsync(item => item.Chave == chave));
+        Assert.Equal(outboxAntes, await contexto.OutboxMessages.CountAsync());
     }
 
     [RequerSqlServerFact]
@@ -189,6 +192,7 @@ public sealed class SqlServerApiFactory : WebApplicationFactory<Program>
                         ["ConnectionStrings:SqlServer"] = connectionString,
                         ["Jwt:Key"] = JwtKey,
                         ["Negocio:FusoHorario"] = "America/Sao_Paulo",
+                        ["RabbitMq:Enabled"] = "false",
                     }
                 )
         );
@@ -225,6 +229,12 @@ public sealed class SqlServerApiFactory : WebApplicationFactory<Program>
     {
         await using var contexto = CriarContexto();
         return await contexto.Vendas.CountAsync();
+    }
+
+    public async Task<int> ContarOutboxAsync()
+    {
+        await using var contexto = CriarContexto();
+        return await contexto.OutboxMessages.CountAsync();
     }
 
     protected override void Dispose(bool disposing)

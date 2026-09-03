@@ -243,6 +243,27 @@ public sealed class EstoqueController(IEstoqueService estoqueService) : BaseCont
 }
 
 [ApiController]
+[Route("api/estoque/alertas")]
+[Route("api/v1/estoque/alertas")]
+[Authorize(Roles = "Administrador")]
+public sealed class AlertasEstoqueController(IAlertaEstoqueService alertas) : BaseController
+{
+    [HttpGet]
+    public async Task<IActionResult> Listar(
+        int pagina = 1,
+        int tamanhoPagina = 20,
+        CancellationToken cancellationToken = default
+    ) => Ok(await alertas.ListarAsync(pagina, tamanhoPagina, cancellationToken));
+
+    [HttpPut("{id:guid}/visualizar")]
+    public async Task<IActionResult> Visualizar(Guid id, CancellationToken cancellationToken)
+    {
+        await alertas.VisualizarAsync(id, UsuarioResponsavel, cancellationToken);
+        return NoContent();
+    }
+}
+
+[ApiController]
 [Route("api/vendas")]
 [Route("api/v1/vendas")]
 [Authorize]

@@ -13,6 +13,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<MovimentacaoFinanceira> MovimentacoesFinanceiras => Set<MovimentacaoFinanceira>();
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<RegistroIdempotencia> RegistrosIdempotencia => Set<RegistroIdempotencia>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
+    public DbSet<AlertaEstoque> AlertasEstoque => Set<AlertaEstoque>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -132,6 +135,40 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .HasOne<Venda>()
                 .WithMany()
                 .HasForeignKey(registro => registro.VendaId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+        modelBuilder.Entity<OutboxMessage>(configuracao =>
+        {
+            configuracao.ToTable("OutboxMessages");
+            configuracao.HasKey(x => x.Id);
+            configuracao.Property(x => x.Tipo).HasMaxLength(200);
+            configuracao.Property(x => x.Conteudo).HasColumnType("nvarchar(max)");
+            configuracao.Property(x => x.Erro).HasMaxLength(1000);
+            configuracao.Property(x => x.CorrelationId).HasMaxLength(100);
+            configuracao.HasIndex(x => new { x.ProcessedAt, x.CreatedAt });
+        });
+        modelBuilder.Entity<InboxMessage>(configuracao =>
+        {
+            configuracao.ToTable("InboxMessages");
+            configuracao.HasKey(x => new { x.MessageId, x.Consumer });
+            configuracao.Property(x => x.Consumer).HasMaxLength(200);
+        });
+        modelBuilder.Entity<AlertaEstoque>(configuracao =>
+        {
+            configuracao.ToTable("AlertasEstoque");
+            configuracao.Property(x => x.NumeroVenda).HasMaxLength(LimitesDominio.NumeroVenda);
+            configuracao.Property(x => x.CriadoPor).HasMaxLength(LimitesDominio.UsuarioAuditoria);
+            configuracao.HasIndex(x => x.ProdutoId);
+            configuracao.HasIndex(x => new { x.VendaId, x.ProdutoId }).IsUnique();
+            configuracao
+                .HasOne(x => x.Produto)
+                .WithMany()
+                .HasForeignKey(x => x.ProdutoId)
+                .OnDelete(DeleteBehavior.Restrict);
+            configuracao
+                .HasOne(x => x.Venda)
+                .WithMany()
+                .HasForeignKey(x => x.VendaId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

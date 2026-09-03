@@ -287,6 +287,12 @@ public interface IEstoqueService
     );
 }
 
+public interface IAlertaEstoqueService
+{
+    Task<Pagina<AlertaEstoqueDto>> ListarAsync(int pagina, int tamanhoPagina, CancellationToken cancellationToken);
+    Task VisualizarAsync(Guid id, string usuarioResponsavel, CancellationToken cancellationToken);
+}
+
 public interface IVendaService
 {
     Task<VendaDto> CriarVendaAsync(

@@ -258,6 +258,44 @@ public sealed class MovimentacaoEstoque : EntidadeBase
     public string? Observacao { get; private set; }
 }
 
+public sealed class AlertaEstoque : EntidadeBase
+{
+    private AlertaEstoque() { }
+
+    public AlertaEstoque(Guid produtoId, Guid vendaId, string numeroVenda, int quantidadeAtual, int estoqueMinimo)
+    {
+        ProdutoId = produtoId;
+        VendaId = vendaId;
+        NumeroVenda = Regras.Exigir(numeroVenda, nameof(numeroVenda), LimitesDominio.NumeroVenda);
+        QuantidadeAtual = quantidadeAtual;
+        EstoqueMinimo = estoqueMinimo;
+        CriadoPor = "mensageria";
+    }
+
+    public Guid ProdutoId { get; private set; }
+    public Produto Produto { get; private set; } = null!;
+    public Guid VendaId { get; private set; }
+    public Venda Venda { get; private set; } = null!;
+    public string NumeroVenda { get; private set; } = string.Empty;
+    public int QuantidadeAtual { get; private set; }
+    public int EstoqueMinimo { get; private set; }
+    public bool Visualizado { get; private set; }
+    public DateTime? VisualizadoAt { get; private set; }
+
+    public void Visualizar()
+    {
+        if (Visualizado)
+            return;
+        Visualizado = true;
+        VisualizadoAt = DateTime.UtcNow;
+    }
+
+    public static AlertaEstoque? CriarSeEstoqueBaixo(Produto produto, Guid vendaId, string numeroVenda) =>
+        produto.QuantidadeEstoque <= produto.EstoqueMinimo
+            ? new AlertaEstoque(produto.Id, vendaId, numeroVenda, produto.QuantidadeEstoque, produto.EstoqueMinimo)
+            : null;
+}
+
 public sealed class Venda : EntidadeBase
 {
     private Venda() { }

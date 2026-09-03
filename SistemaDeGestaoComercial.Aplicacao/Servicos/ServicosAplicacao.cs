@@ -486,6 +486,7 @@ public sealed class VendaService(
     IProdutoRepositorio produtos,
     IEstoqueRepositorio estoque,
     IFinanceiroRepositorio financeiro,
+    IOutboxRepositorio outbox,
     IUnidadeTrabalho unidadeTrabalho
 ) : IVendaService
 {
@@ -572,6 +573,17 @@ public sealed class VendaService(
                 usuarioResponsavel
             )
         );
+        outbox.Adicionar(
+            new VendaRealizadaEvent(
+                Guid.NewGuid(),
+                venda.Id,
+                venda.Numero,
+                venda.ClienteId,
+                venda.Total,
+                venda.DataVenda,
+                venda.Itens.Select(item => new ItemVendaRealizadaEvent(item.ProdutoId, item.Quantidade)).ToArray()
+            )
+        );
         await unidadeTrabalho.SalvarAsync(cancellationToken);
         await transacao.ConfirmarAsync(cancellationToken);
         return await ObterVendaAsync(venda.Id, cancellationToken);
@@ -646,6 +658,48 @@ public sealed class VendaService(
             venda.FormaPagamento
         );
     }
+}
+
+public sealed class AlertaEstoqueService(IAlertaEstoqueRepositorio alertas, IUnidadeTrabalho unidadeTrabalho)
+    : IAlertaEstoqueService
+{
+    public async Task<Pagina<AlertaEstoqueDto>> ListarAsync(
+        int pagina,
+        int tamanhoPagina,
+        CancellationToken cancellationToken
+    )
+    {
+        (pagina, tamanhoPagina) = Paginacao.Normalizar(pagina, tamanhoPagina);
+        var resultado = await alertas.ListarAsync(pagina, tamanhoPagina, cancellationToken);
+        return new Pagina<AlertaEstoqueDto>(
+            resultado.Itens.Select(Mapear).ToArray(),
+            resultado.Pagina,
+            resultado.TamanhoPagina,
+            resultado.TotalItens
+        );
+    }
+
+    public async Task VisualizarAsync(Guid id, string usuarioResponsavel, CancellationToken cancellationToken)
+    {
+        var alerta =
+            await alertas.ObterAsync(id, cancellationToken)
+            ?? throw new EntidadeNaoEncontradaException("Alerta de estoque não encontrado.");
+        alerta.Visualizar();
+        await unidadeTrabalho.SalvarAsync(cancellationToken);
+    }
+
+    private static AlertaEstoqueDto Mapear(AlertaEstoque alerta) =>
+        new(
+            alerta.Id,
+            alerta.ProdutoId,
+            alerta.Produto.Nome,
+            alerta.VendaId,
+            alerta.NumeroVenda,
+            alerta.QuantidadeAtual,
+            alerta.EstoqueMinimo,
+            alerta.CreatedAt,
+            alerta.Visualizado
+        );
 }
 
 public sealed class FinanceiroService(IFinanceiroRepositorio financeiro, IUnidadeTrabalho unidadeTrabalho)

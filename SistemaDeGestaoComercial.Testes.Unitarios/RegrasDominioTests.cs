@@ -5,6 +5,16 @@ namespace SistemaDeGestaoComercial.Testes.Unitarios;
 public sealed class RegrasDominioTests
 {
     [Fact]
+    public void AlertaEstoque_SoEhCriadoQuandoQuantidadeAtingeMinimo()
+    {
+        var produto = new Produto("P1", "Produto", null, 1, 2, 5, "teste");
+        produto.Movimentar(TipoMovimentacaoEstoque.Entrada, 6, null, null, "teste");
+        Assert.Null(AlertaEstoque.CriarSeEstoqueBaixo(produto, Guid.NewGuid(), "V000000000001"));
+        produto.Movimentar(TipoMovimentacaoEstoque.Venda, 1, null, null, "teste");
+        Assert.NotNull(AlertaEstoque.CriarSeEstoqueBaixo(produto, Guid.NewGuid(), "V000000000002"));
+    }
+
+    [Fact]
     public void Cliente_RejeitaCpfInvalido() =>
         Assert.Throws<ExcecaoDominio>(() =>
             new Cliente(

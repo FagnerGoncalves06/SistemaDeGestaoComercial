@@ -1,5 +1,10 @@
 # Arquitetura e decisões
 
+## Mensageria interna
+
+Consulte [ADR 0001 — RabbitMQ com Transactional Outbox](adr/0001-rabbitmq-transactional-outbox.md).
+
+
 O sistema é um monólito modular baseado em Clean Architecture.
 
 ```text
